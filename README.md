@@ -29,7 +29,7 @@ pip install ultralytics opencv-python numpy
 - Запустите скрипт:
 
 ```
-python your_script_name.py
+main.py
 ```
 - Обработанное видео будет сохранено под именем detect.mp4.
 
