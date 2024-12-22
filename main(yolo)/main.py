@@ -1,67 +1,96 @@
+# -*- encoding: utf-8 -*-
+from ultralytics import YOLO
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+import csv
 
-def adjust_thresholds(image, low_threshold, high_threshold):
-    # РџСЂРµРѕР±СЂР°Р·РѕРІР°РЅРёРµ РІ РѕС‚С‚РµРЅРєРё СЃРµСЂРѕРіРѕ
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # РџСЂРёРјРµРЅРµРЅРёРµ CLAHE
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    clahe_img = clahe.apply(gray)
-    
-    # РџСЂРёРјРµРЅРµРЅРёРµ СЂР°Р·РјС‹С‚РёСЏ
-    blurred = cv2.GaussianBlur(clahe_img, (5, 5), 0)
+# Загрузка модели YOLOv8
+model = YOLO('yolov8n.pt')
 
-    # РџСЂРёРјРµРЅРµРЅРёРµ Canny Edge Detection СЃ Р·Р°РґР°РЅРЅС‹РјРё РїРѕСЂРѕРіР°РјРё
-    edges = cv2.Canny(blurred, low_threshold, high_threshold)
-    
-    return edges
+# Список цветов для различных классов
+colors = [
+    (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (0, 255, 255),
+    (255, 0, 255), (192, 192, 192), (128, 128, 128), (128, 0, 0), (128, 128, 0),
+    (0, 128, 0), (128, 0, 128), (0, 128, 128), (0, 0, 128), (72, 61, 139),
+    (47, 79, 79), (47, 79, 47), (0, 206, 209), (148, 0, 211), (255, 20, 147)
+]
 
-def find_contours(image, low_threshold=50, high_threshold=150):
-    edges = adjust_thresholds(image, low_threshold, high_threshold)
-    # РћР±РЅР°СЂСѓР¶РµРЅРёРµ РєРѕРЅС‚СѓСЂРѕРІ
-    contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    return contours
+# Индекс класса для лодки (измените на правильный индекс вашей модели)
+boat_class_id = 0
 
-def display_contours(image, contours):
-    # РћС‚РѕР±СЂР°Р¶РµРЅРёРµ СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ
-    contour_image = image.copy()
-    cv2.drawContours(contour_image, contours, -1, (0, 255, 0), 2)
-    cv2.imshow('Contours', contour_image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+# Открытие исходного видеофайла
+input_video_path = 'vidoos.mp4'
+capture = cv2.VideoCapture(input_video_path)
 
-def main(image_path, low_threshold, high_threshold):
-    # Р—Р°РіСЂСѓР·РєР° РёР·РѕР±СЂР°Р¶РµРЅРёСЏ
-    image = cv2.imread(image_path)
-    
-    # РќР°С…РѕР¶РґРµРЅРёРµ РєРѕРЅС‚СѓСЂРѕРІ
-    contours = find_contours(image, low_threshold, high_threshold)
-    
-    # РџСЂРѕРІРµСЂСЏРµРј РєРѕР»РёС‡РµСЃС‚РІРѕ РєРѕРЅС‚СѓСЂРѕРІ
-    if len(contours) > 100:  # РџСЂРёРјРµСЂ "СЃР»РёС€РєРѕРј РјРЅРѕРіРѕ РєРѕРЅС‚СѓСЂРѕРІ"
-        print("РЎР»РёС€РєРѕРј РјРЅРѕРіРѕ РєРѕРЅС‚СѓСЂРѕРІ РѕР±РЅР°СЂСѓР¶РµРЅРѕ!")
-    elif len(contours) == 0:  # РџСЂРёРјРµСЂ "СЃР»РёС€РєРѕРј РјР°Р»Рѕ РєРѕРЅС‚СѓСЂРѕРІ"
-        print("РљРѕРЅС‚СѓСЂС‹ РЅРµ РѕР±РЅР°СЂСѓР¶РµРЅС‹!")
-    else:
-        print(f"РћР±РЅР°СЂСѓР¶РµРЅРѕ РєРѕРЅС‚СѓСЂРѕРІ: {len(contours)}")
-    
-    # РћС‚РѕР±СЂР°Р¶Р°РµРј РєРѕР»РёС‡РµСЃС‚РІРѕ РєРѕРЅС‚СѓСЂРѕРІ
-    display_contours(image, contours)
+# Чтение параметров видео
+fps = int(capture.get(cv2.CAP_PROP_FPS))
+width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-# РЈРІРµР»РёС‡РµРЅРёРµ РїРѕСЂРѕРіРѕРІРѕРіРѕ Р·РЅР°С‡РµРЅРёСЏ
-def increase_thresholds(low_threshold, high_threshold):
-    return low_threshold + 10, high_threshold + 10
+# Настройка выходного файла
+output_video_path = 'detect.mp4'
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Можно попробовать 'XVID'
+writer = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
-# РЈРјРµРЅСЊС€РµРЅРёРµ РїРѕСЂРѕРіРѕРІРѕРіРѕ Р·РЅР°С‡РµРЅРёСЏ
-def decrease_thresholds(low_threshold, high_threshold):
-    return max(0, low_threshold - 10), max(0, high_threshold - 10)
+# Открытие CSV файла для записи данных
+with open('detection_data.csv', mode='w', newline='') as csv_file:
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(['Frame', 'Class', 'Confidence', 'X1', 'Y1', 'X2', 'Y2'])  # Заголовки столбцов
 
-# РџСЂРёРјРµСЂ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ
-if __name__ == "__main__":
-    image_path = 'image/2.jpg'  # Р—Р°РјРµРЅРёС‚Рµ РЅР° РІР°С€ РїСѓС‚СЊ Рє РёР·РѕР±СЂР°Р¶РµРЅРёСЋ
-    low_threshold = 300
-    high_threshold = 400
-    
-    main(image_path, low_threshold, high_threshold)  # РћР±С‹С‡РЅС‹Р№ СЃР»СѓС‡Р°Р№
+    last_boat_box = None  # Последняя известная рамка для лодки
+    frame_number = 0  # Счетчик кадров
+
+    while True:
+        # Захват кадра
+        ret, frame = capture.read()
+        if not ret:
+            break
+
+        # Обработка кадра с помощью модели YOLO
+        results = model(frame)[0]
+
+        classes_names = results.names
+        classes = results.boxes.cls.cpu().numpy()
+        boxes = results.boxes.xyxy.cpu().numpy().astype(np.int32)
+
+        # Переменная для отслеживания, была ли лодка обнаружена
+        boat_found = False
+
+        # Рисование рамок и подписей на кадре
+        for class_id, box, conf in zip(classes, boxes, results.boxes.conf):
+            if class_id == boat_class_id and conf > 0.5:  # Убедимся, что находим лодку
+                boat_found = True
+                class_name = classes_names[int(class_id)]
+                color = colors[int(class_id) % len(colors)]
+                x1, y1, x2, y2 = box
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(frame, class_name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+                # Запись данных в CSV файл
+                csv_writer.writerow([frame_number, class_name, conf.item(), x1, y1, x2, y2])
+                print(f"Frame: {frame_number}, Class: {class_name}, Confidence: {conf.item()}, Box: [{x1}, {y1}, {x2}, {y2}]")  # Отладочный вывод
+
+                last_boat_box = box  # Сохраняем рамку лодки
+        
+        # Если лодка не найдена, но мы сохранили её последнюю рамку, рисуем её
+        if not boat_found and last_boat_box is not None:
+            x1, y1, x2, y2 = last_boat_box
+            color = colors[boat_class_id % len(colors)]
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(frame, 'Boat', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+        # Запись обработанного кадра в выходной файл
+        writer.write(frame)
+
+        # Отображение кадра
+        cv2.imshow('Processed Frame', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+        frame_number += 1
+        print(f"Processing frame: {frame_number}")  # Отладочный вывод
+
+# Освобождение ресурсов и закрытие окон
+capture.release()
+writer.release()
+cv2.destroyAllWindows()
